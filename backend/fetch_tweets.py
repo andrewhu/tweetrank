@@ -6,7 +6,12 @@ import datetime
 import json
 import redis
 import requests
+import sqlite3
 import time
+
+from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
+
+from db_cache import store_to_cache, store_to_db
 
 import accounts
 import config
@@ -20,7 +25,7 @@ def fetch_recent_tweets(query, start_time=None, end_time=None, max_results=100):
         'authorization': 'Bearer {}'.format(config.TWITTER_BEARER_TOKEN)
     }
     params = {
-        'query': '{} lang:en'.format(query),
+        'query': '{} -is:retweet lang:en'.format(query),
         'max_results': max_results,
         'tweet.fields': 'created_at,entities'
     }
@@ -28,8 +33,8 @@ def fetch_recent_tweets(query, start_time=None, end_time=None, max_results=100):
         params['start_time'] = start_time
     if end_time:
         params['end_time'] = end_time
-    r = requests.get(search_endpoint, headers=headers, params=params)
-    return r.json()
+    results = requests.get(search_endpoint, headers=headers, params=params).json()
+    return results.get('data', [])
 
 def next_fetch_interval(minutes_ago=5):
     """Returns the next time interval to fetch Tweets from"""
@@ -44,19 +49,36 @@ def next_fetch_interval(minutes_ago=5):
     cache.set('last_fetch_time', end_time)
     return start_time, end_time
 
-def process_tweets(tweets):
+def process_tweets(tweets, analyzer):
     """Calculates sentiment and reformats time"""
-    
+    for company in tweets.keys():
+        for tweet in tweets[company]:
+            tweet['datetime'] = datetime.datetime.strptime(tweet['created_at'], '%Y-%m-%dT%H:%M:%S.000Z')
+            tweet['sentiment'] = analyzer.polarity_scores(tweet['text'])['compound']
+    return tweets
+
 
 if __name__ == "__main__":
 
     start_time, end_time = next_fetch_interval()
 
+    analyzer = SentimentIntensityAnalyzer()
+
     # Fetch ISP tweets
     isp_tweets = dict()
     for isp in accounts.ISPs:
         query = ' OR '.join([account['handle'] for account in isp['accounts']])
-        recent_tweets = fetch_recent_tweets(query, start_time, end_time)
+        isp_tweets[isp['name']] = fetch_recent_tweets(query, start_time, end_time)
+
+    # Process
+    processed_tweets = process_tweets(isp_tweets, analyzer)
+
+    # Store to database and cache
+    store_to_cache(processed_tweets, category='ISP')
+    store_to_db(processed_tweets, category='ISP')
+
+
+
 
 
 

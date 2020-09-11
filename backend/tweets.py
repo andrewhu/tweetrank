@@ -12,35 +12,11 @@ from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 import accounts, config
 CATEGORIES = accounts.CATEGORIES
 
-def fetch_tweets(query, start_time=None, end_time=None, max_results=100):
-    """Returns tweets from the Twitter API"""
-    search_url = 'https://api.twitter.com/2/tweets/search/recent'
-    headers = {'content-type':'application/json', 
-     'authorization':f"Bearer {config.TWITTER_BEARER_TOKEN}"}
-    params = {'query':query, 
-     'max_results':max_results, 
-     'tweet.fields':'created_at,entities'}
-    if start_time:
-        params['start_time'] = start_time
-    if end_time:
-        params['end_time'] = end_time
-    return requests.get(search_url, headers=headers, params=params).json()
-
 
 def fetch_recent_tweets(minutes_ago=10):
     """Fetch tweets since the last fetch and store them in the database and cache
     Note: Using Twitter API v2"""
 
-    tweets = dict()
-    for category in CATEGORIES:
-        tweets[category] = dict()
-        for company in CATEGORIES[category]['companies']:
-            accounts = ' OR '.join([x['handle'] for x in company['accounts']])
-            params = {'query':accounts, 
-             'start_time':start_time, 
-             'end_time':end_time, 
-             'max_results':100, 
-             'tweet.fields':'created_at'}
             resp = requests.get(search_url, headers=headers, params=params).json()
             if 'data' in resp:
                 tweets[category][company['name']] = resp['data']
