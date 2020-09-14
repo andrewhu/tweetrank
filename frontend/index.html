@@ -1,0 +1,284 @@
+<!doctype html>
+<html>
+<head>
+    <title>Tweet Rank</title>
+    <script src="https://code.highcharts.com/stock/highstock.js"></script>
+    <script src="https://code.highcharts.com/stock/modules/data.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.5.1/jquery.slim.min.js"
+            integrity="sha512-/DXTXr6nQodMUiq+IUJYCt2PPOUjrHJ9wFrqpJ3XkgPNOZVfMok7cRw6CSxyCQxXn6ozlESsSh1/sMCTF1rL/g=="
+            crossorigin="anonymous"></script>
+    <!--    <script src="https://code.highcharts.com/stock/modules/exporting.js"></script>-->
+</head>
+<style>
+    @font-face {
+        font-family: "Founders";
+        src: url("/assets/fonts/FoundersGroteskRegular.woff2") format("woff2"),
+        url("/assets/fonts/FoundersGroteskRegular.woff") format("woff"),
+        url("/assets/fonts/FoundersGroteskRegular.ttf") format("truetype")
+    }
+    * {
+        margin: 0;
+        padding: 0;
+    }
+    h1, h2, h3 {
+        font-weight: normal;
+    }
+
+    html, body {
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        font-family: "Founders", sans-serif;
+
+    }
+    .container {
+        width: 95%;
+        max-width: 1200px;
+        margin: 0 auto;
+        padding-top: 4em;
+        /*margin-left: 20px;*/
+        /*margin-right: 20px;*/
+    }
+
+    .highcharts-figure, .highcharts-data-table table {
+        /* min-width: 360px;  */
+        /* max-width: 1px; */
+        font-family: "Founders", sans-serif;
+        width: 100%;
+        margin: 1em auto;
+        /*height: 600px;*/
+        overflow: hidden
+    }
+
+    .highcharts-data-table table {
+
+        border-collapse: collapse;
+        border: 1px solid #EBEBEB;
+        margin: 10px auto;
+        text-align: center;
+        /* width: 100%; */
+        /* max-width: 500px; */
+    }
+
+    .highcharts-data-table caption {
+        padding: 1em 0;
+        font-size: 1.2em;
+        color: #555;
+    }
+
+    .highcharts-data-table th {
+        font-weight: 600;
+        padding: 0.5em;
+    }
+
+    .highcharts-data-table td, .highcharts-data-table th, .highcharts-data-table caption {
+        padding: 0.5em;
+    }
+
+    .highcharts-data-table thead tr, .highcharts-data-table tr:nth-child(even) {
+        background: #f8f8f8;
+    }
+
+    .highcharts-data-table tr:hover {
+        background: #f1f7ff;
+    }
+
+    ul {
+        list-style: none;
+
+    }
+    ul li {
+        display: inline-block;
+        margin-right: 10px;
+        font-size: 1.2em
+    }
+
+</style>
+<body>
+<div class="container">
+    <h1>Tweet Rank</h1>
+    <p>Tracking user interactions with customer service accounts on Twitter</p>
+    <br>
+    <h3>Chart options</h3>
+    <ul class="category-select">
+        <li>Categories:</li>
+        <li>
+            <input class="clickable" data-category="isps" type="checkbox" id="isps" checked>
+            <label for="isps"> ISPs</label>
+        </li>
+        <li>
+            <input class="clickable" data-category="restaurants" type="checkbox" id="restaurants">
+            <label for="restaurants"> Restaurants</label>
+        </li>
+    </ul>
+    <ul class="chart-select">
+        <li>Metric:</li>
+        <li><input type="radio" id="sentiment-radio" name="chart-select" checked><label for="sentiment-radio">Sentiment</label></li>
+        <li><input type="radio" id="count-radio" name="chart-select"><label for="count-radio">Counts</label></li>
+    </ul>
+    <figure class="highcharts-figure">
+        <div id="container"></div>
+    </figure>
+    <a href="https://github.com/andrewhu/tweetrank" target="_blank">Github</a>
+</div>
+
+</body>
+<script>
+    var tweet_data;
+    var isps = [
+        'Verizon',
+        'AT&T',
+        'Comcast/Xfinity',
+        'Spectrum',
+        'Cox',
+        'Optimum',
+        'CenturyLink',
+    ];
+    var restaurants = [
+        'Starbucks',
+        "Wendy's",
+        "McDonald's",
+        'Subway',
+        'Taco Bell',
+        'Burger King',
+        'Pizza Hut',
+        'KFC',
+        "Domino's",
+        'Dunkin Donuts',
+        'Chick-fil-A',
+        'Chipotle',
+        'Popeyes',
+    ]
+    function createChart(seriesOptions, title, y_title) {
+        Highcharts.stockChart('container', {
+            chart: {
+                // height: '5em'//window.innerHeight * 0.5,
+                // width: "100%"
+                style: {
+                    fontFamily: "Founders"
+                }
+            },
+            title: {
+                text: title,
+                style: {
+                    fontSize: "2em"
+                }
+            },
+            yAxis: {
+                title: {
+                    text: y_title,
+                    style: {
+                        fontSize: "1.6em;"
+                    }
+                },
+                opposite: false,
+                labels: {
+                    style: {
+                        fontSize: "1.2em"
+                    }
+                }
+
+            },
+            xAxis: {
+                labels: {
+                    style: {
+                        fontSize: "1.2em"
+                    }
+                }
+            },
+            navigator: {
+                xAxis: {
+                    labels: {
+                        style: {
+                            fontSize: "1.2em"
+                        }
+                    }
+                }
+
+            },
+
+            rangeSelector: {
+                enabled: false,
+                // allButtonsEnabled: false,
+                // inputEnabled: false,
+                // buttons: []
+                //     {
+                //         type: 'hour',
+                //         count: 1,
+                //         text: 'hour'
+                //     },
+                //     {
+                //         type: 'all',
+                //         text: 'All'
+                //     }
+                // ]
+            },
+
+            legend: {
+                enabled: true,
+                layout: 'vertical',
+                align: 'right',
+                verticalAlign: 'middle',
+                itemStyle: {
+                    "color": "#333333",
+                    "cursor": "pointer",
+                    "fontSize": "1.4em",
+                    "fontWeight": "normal",
+                    "textOverflow": "ellipsis"
+                }
+            },
+
+            plotOptions: {
+                series: {
+                    label: {
+                        connectorAllowed: false
+                    },
+                }
+            },
+
+            series: seriesOptions,
+
+            responsive: {
+                rules: [{
+                    condition: {
+                        maxWidth: 500
+                    },
+                    chartOptions: {
+                        legend: {
+                            layout: 'horizontal',
+                            align: 'center',
+                            verticalAlign: 'bottom'
+                        }
+                    }
+                }]
+            }
+        });
+    }
+    Highcharts.getJSON("https://tweetrank.drew.hu/api/data", function (data) {
+        var series = []
+        for(var i=0; i<restaurants.length; i++) {
+            var name = restaurants[i];
+            var format_data = [];
+            for(var j=0; j<data[name].length; j++) {
+                format_data.push([data[name][j][0], data[name][j][2]])
+            }
+            series.push({
+                name: name,
+                type: 'spline',
+                data: format_data
+            })
+        }
+
+        createChart(series, "Tweet Sentiment", "Sentiment")
+    })
+    $(function(){
+        // Category select
+        $(".category-select .clickable").click(function(e) {
+            console.log("clicked")
+            console.log($(this).data("category"))
+        })
+
+        // Metric select
+    });
+</script>
+</html>

@@ -17,20 +17,30 @@ def store_to_cache(tweets, company, category, cache):
     """Stores Tweet sentiments to cache.
     key -> (total_sentiment, count) """
 
-    category_data = json.loads(cache.get(category) or '{}')
-    company_data = json.loads(cache.get(company) or '{}')
+    data = json.loads(cache.get("all") or '{}')
+
+    if company not in data:
+        data[company] = dict()
+
+    if category not in data:
+        data[category] = dict()
+
+    # category_data = json.loads(cache.get(category) or '{}')
+    # company_data = json.loads(cache.get(company) or '{}')
 
     for tweet in tweets:
         ymd = tweet['datetime'].strftime('%Y-%m-%d')
 
-        total, count = category_data.get(ymd, (0,0))
-        category_data[ymd] = total+tweet['sentiment'], count+1
+        total, count = data[company].get(ymd, (0,0))
+        data[company][ymd] = total+tweet['sentiment'], count+1
 
-        total, count = company_data.get(ymd, (0,0))
-        company_data[ymd] = total+tweet['sentiment'], count+1
+        total, count = data[category].get(ymd, (0,0))
+        data[category][ymd] = total+tweet['sentiment'], count+1
 
-    cache.set(category, json.dumps(category_data))
-    cache.set(company, json.dumps(company_data))
+    cache.set("all", json.dumps(data))
+
+    # cache.set(category, json.dumps(category_data))
+    # cache.set(company, json.dumps(company_data))
 
 
 def store_to_db(tweets, company, category):
@@ -82,8 +92,7 @@ def reload_cache(cache):
     # Clear cache
     clear_cache(cache)
 
-    category_tweets = defaultdict(dict)
-    company_tweets = defaultdict(dict)
+    data = defaultdict(dict)
 
     db_filenames = glob.glob(f"{DIR_PATH}/data/tweet_sentiment_*.db")
 
@@ -99,18 +108,15 @@ def reload_cache(cache):
         for tweet in tweets:
             ymd = datetime.fromtimestamp(tweet['created_at']).strftime("%Y-%m-%d")
 
-            total, count = category_tweets[tweet['category']].get(ymd, (0,0))
-            category_tweets[tweet['category']][ymd] = total+tweet['sentiment'], count+1
+            total, count = data[tweet['company']].get(ymd, (0,0))
+            data[tweet['company']][ymd] = total+tweet['sentiment'], count+1
 
-            total, count = company_tweets[tweet['company']].get(ymd, (0,0))
-            company_tweets[tweet['company']][ymd] = total+tweet['sentiment'], count+1
+            total, count = data[tweet['category']].get(ymd, (0,0))
+            data[tweet['category']][ymd] = total+tweet['sentiment'], count+1
 
         conn.close()
 
-    for category_name in category_tweets.keys():
-        cache.set(category_name, json.dumps(category_tweets[category_name]))
-    for company_name in company_tweets.keys():
-        cache.set(company_name, json.dumps(company_tweets[company_name]))
+    cache.set("all", json.dumps(data))
 
 def get_db_size():
     """Returns number of Tweets stored in all databases"""

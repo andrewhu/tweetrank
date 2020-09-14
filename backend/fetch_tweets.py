@@ -18,12 +18,12 @@ import db_cache
 import accounts
 import config
 
-def fetch_recent_tweets(query, since_id=None, max_results=100):
+def fetch_recent_tweets(query, since_id=None, max_results=100, bearer_token=config.TWITTER_BEARER_TOKEN):
     """Returns Tweets from within the past 7 days (API v2)"""
     endpoint = "https://api.twitter.com/2/tweets/search/recent"
     headers = {
         'content-type': 'application/json',
-        'authorization': f"Bearer {config.TWITTER_BEARER_TOKEN}"
+        'authorization': f"Bearer {bearer_token}"
     }
     params = {
         'query': f"{query} -is:retweet lang:en",
@@ -66,9 +66,13 @@ if __name__ == "__main__":
     # Fetch tweets from each company and category
     num_fetched = 0
     for category_name in accounts.categories:
+        if category_name == 'ISP':
+            BEARER_TOKEN = config.TWITTER_BEARER_TOKEN
+        else:
+            BEARER_TOKEN = config.TWITTER_BEARER_TOKEN_2
         for company in accounts.categories[category_name]:
             all_handles = ' OR '.join([account['handle'] for account in company['accounts']])
-            response = fetch_recent_tweets(query=all_handles, since_id=since_ids.get(company['name']))
+            response = fetch_recent_tweets(query=all_handles, since_id=since_ids.get(company['name']), bearer_token=BEARER_TOKEN)
             try:
                 result_count = response['meta']['result_count']
                 if result_count == 0:
