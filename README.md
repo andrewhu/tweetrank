@@ -1,6 +1,10 @@
 # Tweetrank
 Visualizing sentiments directed towards customer service accounts on Twitter
 
+Demo: [tweetrank.drew.hu](https://tweetrank.drew.hu)
+
+<img src="splash.png" width="100%">
+
 ## Requirements
 **Python Requirements**
 * Flask
