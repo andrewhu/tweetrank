@@ -8,6 +8,7 @@
             integrity="sha512-/DXTXr6nQodMUiq+IUJYCt2PPOUjrHJ9wFrqpJ3XkgPNOZVfMok7cRw6CSxyCQxXn6ozlESsSh1/sMCTF1rL/g=="
             crossorigin="anonymous"></script>
     <!--    <script src="https://code.highcharts.com/stock/modules/exporting.js"></script>-->
+    <link rel="shortcut icon" href="/assets/img/apple_upchart.png">
 </head>
 <style>
     @font-face {
@@ -47,7 +48,8 @@
         width: 100%;
         margin: 1em auto;
         /*height: 600px;*/
-        overflow: hidden
+        overflow: hidden;
+        box-shadow: 3px 3px 15px rgba(0,0,0,0.1);
     }
 
     .highcharts-data-table table {
@@ -82,6 +84,9 @@
     .highcharts-data-table tr:hover {
         background: #f1f7ff;
     }
+    p {
+        font-size: 1.1em;
+    }
 
     ul {
         list-style: none;
@@ -90,31 +95,37 @@
     ul li {
         display: inline-block;
         margin-right: 10px;
-        font-size: 1.2em
+        font-size: 1.1em
     }
 
 </style>
 <body>
 <div class="container">
-    <h1>Tweet Rank</h1>
+    <h1>📈 Tweet Rank</h1>
     <p>Tracking user interactions with customer service accounts on Twitter</p>
     <br>
-    <h3>Chart options</h3>
+    <h2>Chart options</h2>
     <ul class="category-select">
         <li>Categories:</li>
         <li>
-            <input class="clickable" data-category="isps" type="checkbox" id="isps" checked>
-            <label for="isps"> ISPs</label>
+            <input class="clickable" data-category="isps" type="checkbox" id="isps-checkbox" checked>
+            <label for="isps-checkbox"> ISPs</label>
         </li>
         <li>
-            <input class="clickable" data-category="restaurants" type="checkbox" id="restaurants">
-            <label for="restaurants"> Restaurants</label>
+            <input class="clickable" data-category="restaurants" type="checkbox" id="restaurants-checkbox">
+            <label for="restaurants-checkbox"> Restaurants</label>
         </li>
     </ul>
-    <ul class="chart-select">
+    <ul class="metric-select">
         <li>Metric:</li>
-        <li><input type="radio" id="sentiment-radio" name="chart-select" checked><label for="sentiment-radio">Sentiment</label></li>
-        <li><input type="radio" id="count-radio" name="chart-select"><label for="count-radio">Counts</label></li>
+        <li>
+            <input type="radio" data-metric="sentiment" id="sentiment-radio" name="metric-select" checked>
+            <label for="sentiment-radio">Sentiment</label>
+        </li>
+        <li>
+            <input type="radio" data-metric="counts" id="count-radio" name="metric-select">
+            <label for="count-radio">Counts</label>
+        </li>
     </ul>
     <figure class="highcharts-figure">
         <div id="container"></div>
@@ -124,7 +135,8 @@
 
 </body>
 <script>
-    var tweet_data;
+    var tweet_data = [];
+    var chart;
     var isps = [
         'Verizon',
         'AT&T',
@@ -149,8 +161,8 @@
         'Chipotle',
         'Popeyes',
     ]
-    function createChart(seriesOptions, title, y_title) {
-        Highcharts.stockChart('container', {
+    function createChart(seriesOptions, title) {
+        var chrt = Highcharts.stockChart('container', {
             chart: {
                 // height: '5em'//window.innerHeight * 0.5,
                 // width: "100%"
@@ -159,14 +171,14 @@
                 }
             },
             title: {
-                text: title,
+                text: "Tweet " + title,
                 style: {
                     fontSize: "2em"
                 }
             },
             yAxis: {
                 title: {
-                    text: y_title,
+                    text: title,
                     style: {
                         fontSize: "1.6em;"
                     }
@@ -253,32 +265,78 @@
                 }]
             }
         });
+        return chrt
+    }
+    function getSeries(company_names, metric="sentiment") {
+        var series = [];
+        company_names.forEach(function(company_name) {
+            var series_data = []
+            tweet_data[company_name].forEach(function(x) {
+                series_data.push([x[0], (metric === "sentiment") ? x[1] : x[2]])
+            });
+            series.push({
+                name: company_name,
+                type: 'spline',
+                data: series_data
+            });
+        });
+        return series;
+    }
+    function capitalize(string) {
+        return string.charAt(0).toUpperCase() + string.slice(1)
     }
     Highcharts.getJSON("https://tweetrank.drew.hu/api/data", function (data) {
-        var series = []
-        for(var i=0; i<restaurants.length; i++) {
-            var name = restaurants[i];
-            var format_data = [];
-            for(var j=0; j<data[name].length; j++) {
-                format_data.push([data[name][j][0], data[name][j][2]])
-            }
-            series.push({
-                name: name,
-                type: 'spline',
-                data: format_data
-            })
-        }
-
-        createChart(series, "Tweet Sentiment", "Sentiment")
+        tweet_data = data;
+        var metric = 'sentiment';
+        chart = createChart(getSeries(isps, metric), capitalize(metric))
+        // console.log(chart.series)
     })
     $(function(){
+        $(".metric-select input[type='radio']").click(function() {
+            console.log("update")
+            updateGraph();
+        })
         // Category select
         $(".category-select .clickable").click(function(e) {
-            console.log("clicked")
-            console.log($(this).data("category"))
-        })
+            console.log("update")
+            updateGraph();
+        });
+        function updateGraph() {
+            var data = [];
+            var metric = $("input[name='metric-select']:checked").data("metric")
+            console.log("metric:", metric)
 
-        // Metric select
+            if($("#isps-checkbox").is(':checked')) {
+                data = data.concat(getSeries(isps, metric))
+                console.log("adding isps")
+            }
+            if($("#restaurants-checkbox").is(':checked')) {
+                data = data.concat(getSeries(restaurants, metric))
+                console.log("adding restaurants")
+            }
+            console.log("Data:", data)
+            while(chart.series.length > 0) {
+                chart.series[0].remove(false)
+            }
+            chart.redraw()
+
+            data.forEach(function(srs) {
+                console.log(srs)
+                chart.addSeries(srs, false)
+            })
+            chart.update({
+                title: {
+                    text: "Tweet " + metric,
+                },
+                yAxis: {
+                    title: {
+                        text: capitalize(metric),
+                    }
+                }
+            })
+            chart.redraw()
+
+        }
     });
 </script>
 </html>
