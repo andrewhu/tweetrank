@@ -1,5 +1,7 @@
 """
 Methods for fetching tweets from the Twitter API
+
+B2 sync command: /var/www/tweetrank/backend/venv/bin/b2 sync /var/www/tweetrank/backend/data b2://tweetrank
 """
 
 import datetime
@@ -62,8 +64,9 @@ if __name__ == "__main__":
     analyzer = SentimentIntensityAnalyzer()
 
     # Fetch tweets from each company and category
+    num_fetched = 0
     for category_name in accounts.categories:
-        for company in accounts.categores[category_name]:
+        for company in accounts.categories[category_name]:
             all_handles = ' OR '.join([account['handle'] for account in company['accounts']])
             response = fetch_recent_tweets(query=all_handles, since_id=since_ids.get(company['name']))
             try:
@@ -71,6 +74,7 @@ if __name__ == "__main__":
                 if result_count == 0:
                     continue
                 tweets = response['data']
+                num_fetched += len(tweets)
 
                 # Process tweets
                 tweets = process_tweets(tweets, analyzer)
@@ -83,8 +87,8 @@ if __name__ == "__main__":
                 since_ids[company['name']] = response['meta']['newest_id']
 
             except:
-                logging.error(f"Something went wrong fetching Tweets for {all_handles}. Response: {tweets}")
+                logging.error(f"Something went wrong fetching Tweets for {all_handles}. Response: {response}")
 
-    cache.set("since_ids", since_ids)
+    cache.set("since_ids", json.dumps(since_ids))
+    logging.info(f"Fetched {num_fetched} Tweets")
 
-    

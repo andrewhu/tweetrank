@@ -45,15 +45,16 @@ def store_to_db(tweets, company, category):
         tweet['timestamp'] = int(tweet['datetime'].timestamp())
         tweets_by_month[year_month].append(tweet)
 
+    # Store tweets to database
     for year_month in tweets_by_month.keys():
         db_filename = f"{DIR_PATH}/data/tweet_sentiment_{year_month}.db"
 
         # Create database file if it doesn't already exist
         if not os.path.exists(db_filename):
-            template_filename = f"{DIR_PATH}/data/templates/tweet_sentiment_template.db"
+            template_filename = f"{DIR_PATH}/data/tweet_sentiment_template.db"
             copyfile(template_filename, db_filename)
 
-        # Insert Tweets into database
+        # Insert Tweets
         conn = sqlite3.connect(db_filename)
         c = conn.cursor()
         sql = """INSERT INTO tweet_sentiment(tweet_id, company, category, text, created_at, sentiment) VALUES (?,?,?,?,?,?)"""
@@ -84,7 +85,7 @@ def reload_cache(cache):
     category_tweets = defaultdict(dict)
     company_tweets = defaultdict(dict)
 
-    db_filenames = glob.glob("{}/data/tweet_sentiment_*.db".format(DIR_PATH))
+    db_filenames = glob.glob(f"{DIR_PATH}/data/tweet_sentiment_*.db")
 
     # num_tweets = 0
 
@@ -92,7 +93,7 @@ def reload_cache(cache):
         conn = sqlite3.connect(db_filename)
         conn.row_factory = sqlite3.Row
         c = conn.cursor()
-        c.execute("""SELECT (company, category, created_at, sentiment) FROM tweet_sentiment""")
+        c.execute("""SELECT company, category, created_at, sentiment FROM tweet_sentiment""")
         tweets = c.fetchall()
         # num_tweets += len(tweets)
         for tweet in tweets:
@@ -144,6 +145,10 @@ def load_since_ids(cache):
 
     return since_ids
 
+def init_cache(cache):
+    reload_cache(cache)
+    load_since_ids(cache)
+    
 
 # def get_since_id(company_name, cache):
 #     """Returns most recent Tweet ID stored referencing the company"""
