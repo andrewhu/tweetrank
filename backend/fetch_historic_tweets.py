@@ -1,155 +1,130 @@
+from collections import defaultdict
 import datetime
+import json
 import requests
 import sqlite3
 import time
+import pytz
 
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 
 import accounts
+import db_cache
 import config
 
-
-def fetch_tweets_v2(query, end_time=None, until_id=None):
-    """Fetches tweets from the Twitter API v2"""
-    search_endpoint = "https://api.twitter.com/2/tweets/search/recent"
+def fetch_tweets(query, to_date, bearer_token, environment, timespan='30day'):
     headers = {
-        'content-type': 'application/json',
-        'authorization': 'Bearer {}'.format(config.TWITTER_TOKEN_2)
+        # 'authorization': f'Bearer {config.TWITTER_MATH189}',
+        'authorization': f'Bearer {bearer_token}',
+        'content-type': 'application/json'
     }
-    params = {
-        'query': '{} -is:retweet lang:en'.format(query),
-        'max_results': 100,
-        'tweet.fields': 'created_at,entities'
+    data = {
+        'query': f"{query} lang:en",
+        'maxResults': "100",
+        'toDate': to_date
     }
-    if until_id:
-        params['until_id'] = until_id
-    else:
-        params['end_time']: end_time
+    r = requests.post(f"https://api.twitter.com/1.1/tweets/search/{timespan}/{environment}", headers=headers, data=json.dumps(data))
+    return r.json()
 
-    return requests.get(search_endpoint, headers=headers, params=params).json()
-
-def get_all_tweets_week(name, query, category):
+def do_it():
+    earliest_tweet = "Sep 01 00:00:00 +0000 2020"  # Earliest date to fetch tweets from
+    timespan = '30day'
+    category = 'Restaurant'  # Restaurant or ISP
 
     # DB Coneection
     conn = sqlite3.connect("data/tweet_sentiment_2020-09.db")
     c = conn.cursor()
 
-    # SEntiment analyzer
+    # Sentiment analyzer
     analyzer = SentimentIntensityAnalyzer()
 
-    start_dt = datetime.datetime.utcnow() - datetime.timedelta(minutes=5)
-    end_time = start_dt.strftime('%Y-%m-%dT%H:%M:00Z')
+    # Earliest date to fetch from
+    earliest_date = datetime.datetime.strptime(earliest_tweet,"%b %d %H:%M:%S %z %Y" )
 
-    # Initial fetch
-    tweets = fetch_tweets_v2(query, end_time)
-    until_id = tweets['meta']['oldest_id']
+    # Earliest Tweet date we have stored
+    timestamps = db_cache.get_earliest_timestamps()
 
+    sql = """INSERT INTO tweet_sentiment(tweet_id, company, category, text, created_at, sentiment) VALUES (?,?,?,?,?,?)"""
 
-    while True:
-        # print(f"===== Fetching tweets until {until_id} =====")
-        # Fetch tweets
-        tweets = fetch_tweets_v2(query, until_id=until_id)
+    utc = pytz.UTC
 
-        if 'errors' in tweets:
-            print(tweets)
-            break
-        elif 'meta' in tweets and tweets['meta']['result_count'] == 0:
-            print("done")
-            break
-        else:
-            try:
-                until_id = tweets['meta']['oldest_id']
-                tweets = tweets['data']
-            except:
-                print(tweets)
-        oldest_dt = datetime.datetime.strptime(tweets[-1]['created_at'], '%Y-%m-%dT%H:%M:%S.000Z')
+    total_fetched = 0
 
-        print("Oldest tweet:", oldest_dt.strftime("%b %d, %Y %I:%M%p"), end=' - ')
+    # List of tokens
+    tokens = config.TWITTER_TOKENS
+    token_idx = 0
+    token = tokens[token_idx]
+    bearer_token = token['token']
+    environment = token['env']
 
-        error_count = 0
-        for tweet in tweets:
-            # Calculate sentiment
-            sentiment = analyzer.polarity_scores(tweet['text'])['compound']
+    for company in accounts.categories[category]:
+        company_name = company['name']
+        print(f"===== Fetching Tweets for {company_name} =====")
+        query = ' OR '.join([x['handle'] for x in company['accounts']])
 
-            # Calculate timestamp
-            timestamp = datetime.datetime.strptime(tweet['created_at'], '%Y-%m-%dT%H:%M:%S.000Z').timestamp()
+        # Get time of earliest tweet we have for this company
+        to_date = utc.localize(datetime.datetime.fromtimestamp(timestamps[company_name]))
 
-            # Store in db
-            sql = """INSERT INTO tweet_sentiment( tweet_id,  company,  category, text, created_at, sentiment) VALUES (?,?,?,?,?,?)"""
+        if to_date < earliest_date:
+            print(f"Skipping {company_name} bc earliest time is {to_date.strftime('%b %d, %Y %I:%M%p')}")
+            continue
 
-            try:
-                c.execute(sql, (tweet['id'], name, category, tweet['text'], timestamp, sentiment))
-            except:
-                error_count += 1
-        print("errors:", error_count, end=' - ')
-        conn.commit()
+        while to_date > earliest_date:
+            to_date_str = to_date.strftime("%Y%m%d%H%M")
+            response = fetch_tweets(query=query,
+                                    to_date=to_date_str,
+                                    bearer_token=bearer_token,
+                                    environment=environment,
+                                    timespan=timespan)
 
-        # Get new db size
-        c.execute("SELECT COUNT(*) FROM tweet_sentiment")
-        new_size = c.fetchone()[0]
+            # Try to switch token if our quota is reached
+            while 'error' in response:
+                print("switching tokens")
+                time.sleep(0.5)
+                token_idx += 1
+                if token_idx >= len(tokens):
+                    print("Exhausted tokens")
+                    return
+                token = tokens[token_idx]
+                bearer_token = token['token']
+                environment = token['env']
 
-        print("New db size:", new_size)
+                response = fetch_tweets(query=query,
+                                        to_date=to_date_str,
+                                        bearer_token=bearer_token,
+                                        environment=environment,
+                                        timespan=timespan)
 
-        time.sleep(2.1)
+            if 'results' not in response:
+                print(response)
+                break
+            tweets = response['results']
+            total_fetched += len(tweets)
+            to_date = datetime.datetime.strptime(tweets[-1]['created_at'], "%a %b %d %H:%M:%S %z %Y")
+            print(f"Earliest for {company_name}: {to_date.strftime('%b %d %I:%M%p')}", end=' - ')
 
-    conn.close()
+            # Store tweets to db
+            for tweet in tweets:
+                # Ignore retweets
+                if 'retweeted_status' in tweet:
+                    continue
+                tweet_id = tweet['id']
+                created_at = datetime.datetime.strptime(tweet['created_at'], "%a %b %d %H:%M:%S %z %Y")
+
+                # Ignore august
+                if created_at.month < 9:
+                    continue
+
+                created_at_ts = int(created_at.timestamp())
+                sentiment = analyzer.polarity_scores(tweet['text'])['compound']
+                c.execute(sql, (tweet_id, company_name, category, tweet['text'], created_at_ts, sentiment))
+            conn.commit()
+            print(f"New db size: {db_cache.get_db_size()}", end=' - ')
+            print(f"Total tweets fetched: {total_fetched}")
+            time.sleep(2.05)
 
 
 if __name__ == "__main__":
-    # fetch_week()
-    for company in accounts.categories['ISP']:
-        handles = [x['handle'] for x in company['accounts']]
-        query = ' OR '.join(handles)
-        # print(company['name'], query)
-        print(f"==== Fetching {company['name']} =====")
-        # break
-        get_all_tweets_week(company['name'], query, category="ISP")
-
-
-
-
-
-
-
-def fetch_month():
-    pass
-
-def fetch_historic():
-    pass
-
-
-API_v1_URL = "https://api.twitter.com/1.1"
-
-def fetch_historic_tweets(query, timespan, max_results=100, from_date=None, to_date=None):
-    """Fetch tweets from Twitter's historical endpoints (30-day and all-time) API (v1)"""
-    assert timespan in ('30day', 'fullarchive')
-
-    request_url = f"{API_v1_URL}/tweets/search/{timespan}/{config.TWITTER_ENV}.json"
-
-    headers = {
-        'authorization': f"Bearer {config.TWITTER_BEARER_TOKEN}",
-        'content-type': "application/json"
-    }
-
-    # Request parameters
-    data = {
-        'query': f"{query} lang:en",
-        'maxResults': str(max_results)
-    }
-    if from_date:
-        data['fromDate'] = from_date
-    if to_date:
-        data['toDate'] = to_date
-
-    r = requests.post(request_url, headers=headers, data=json.dumps(data))
-
-    now = int(time.time())
-
-    return r.json(), now
-
-
-
-
-
+    do_it()
 
 

@@ -151,6 +151,25 @@ def load_since_ids(cache):
 
     return since_ids
 
+def get_earliest_timestamps():
+    """Returns earliest Tweet timestamps for each company we have stored in the database"""
+    timestamps = dict()
+    db_filenames = glob.glob(os.path.join(DIR_PATH, "data/tweet_sentiment_*.db"))
+    for db_filename in db_filenames:
+        conn = sqlite3.connect(db_filename)
+        conn.row_factory = sqlite3.Row
+        c = conn.cursor()
+        c.execute("""SELECT created_at, company FROM tweet_sentiment""")
+        rows = c.fetchall()
+        for row in rows:
+            timestamp = row['created_at']
+            company_name = row['company']
+            if company_name not in timestamps:
+                timestamps[company_name] = float('inf')
+            timestamps[company_name] = min(timestamps[company_name], timestamp)
+    return timestamps
+
+
 def init_cache(cache):
     reload_cache(cache)
     load_since_ids(cache)
